@@ -26,34 +26,19 @@ CREATE TABLE IF NOT EXISTS public.shipping_cities (
 ALTER TABLE public.shipping_regions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shipping_cities ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'shipping_regions'
-      AND policyname = 'Anyone can read active regions'
-  ) THEN
-    CREATE POLICY "Anyone can read active regions"
-    ON public.shipping_regions
-    FOR SELECT
-    TO anon, authenticated
-    USING (true);
-  END IF;
+DROP POLICY IF EXISTS "Anyone can read active regions" ON public.shipping_regions;
+CREATE POLICY "Anyone can read active regions"
+ON public.shipping_regions
+FOR SELECT
+TO anon, authenticated
+USING (true);
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'shipping_cities'
-      AND policyname = 'Anyone can read active cities'
-  ) THEN
-    CREATE POLICY "Anyone can read active cities"
-    ON public.shipping_cities
-    FOR SELECT
-    TO anon, authenticated
-    USING (true);
-  END IF;
-END $$;
+DROP POLICY IF EXISTS "Anyone can read active cities" ON public.shipping_cities;
+CREATE POLICY "Anyone can read active cities"
+ON public.shipping_cities
+FOR SELECT
+TO anon, authenticated
+USING (true);
 
 DO $$
 BEGIN
@@ -64,33 +49,21 @@ BEGIN
     WHERE n.nspname = 'public'
       AND p.proname = 'has_role'
   ) THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_policies
-      WHERE schemaname = 'public'
-        AND tablename = 'shipping_regions'
-        AND policyname = 'Admins can manage regions'
-    ) THEN
-      CREATE POLICY "Admins can manage regions"
-      ON public.shipping_regions
-      FOR ALL
-      TO authenticated
-      USING (public.has_role(auth.uid(), 'admin'))
-      WITH CHECK (public.has_role(auth.uid(), 'admin'));
-    END IF;
+    DROP POLICY IF EXISTS "Admins can manage regions" ON public.shipping_regions;
+    CREATE POLICY "Admins can manage regions"
+    ON public.shipping_regions
+    FOR ALL
+    TO authenticated
+    USING (public.has_role(auth.uid(), 'admin'::public.app_role))
+    WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
 
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_policies
-      WHERE schemaname = 'public'
-        AND tablename = 'shipping_cities'
-        AND policyname = 'Admins can manage cities'
-    ) THEN
-      CREATE POLICY "Admins can manage cities"
-      ON public.shipping_cities
-      FOR ALL
-      TO authenticated
-      USING (public.has_role(auth.uid(), 'admin'))
-      WITH CHECK (public.has_role(auth.uid(), 'admin'));
-    END IF;
+    DROP POLICY IF EXISTS "Admins can manage cities" ON public.shipping_cities;
+    CREATE POLICY "Admins can manage cities"
+    ON public.shipping_cities
+    FOR ALL
+    TO authenticated
+    USING (public.has_role(auth.uid(), 'admin'::public.app_role))
+    WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
   END IF;
 END $$;
 
