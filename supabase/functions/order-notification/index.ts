@@ -1,219 +1,10 @@
-const corsHeaders = {
+const headers = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Content-Type": "application/json",
 };
 
-const ADMIN_EMAIL = Deno.env.get("ORDER_ADMIN_EMAIL") || "mosaichive@gmail.com";
-const ADMIN_PHONE = Deno.env.get("ORDER_ADMIN_PHONE") || "+233544909011";
-const EMAIL_FROM = Deno.env.get("RESEND_FROM_EMAIL") || "Maggs Trove <onboarding@resend.dev>";
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function escapeXml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function humanizePaymentMethod(paymentMethod) {
-  const labelMap = {
-    cash_on_delivery: "Cash on Delivery",
-    "paystack:mobile_money": "Paystack Mobile Money",
-    "paystack:card": "Paystack Card",
-    "paystack:bank_transfer": "Paystack Bank Transfer",
-  };
-
-  if (labelMap[paymentMethod]) {
-    return labelMap[paymentMethod];
-  }
-
-  if (String(paymentMethod || "").startsWith("paystack:")) {
-    const channel = String(paymentMethod).replace("paystack:", "").replaceAll("_", " ");
-    return "Paystack " + channel.replace(/\b\w/g, function (char) {
-      return char.toUpperCase();
-    });
-  }
-
-  return String(paymentMethod || "Unknown").replaceAll("_", " ").replace(/\b\w/g, function (char) {
-    return char.toUpperCase();
-  });
-}
-
-function normalizePhoneNumber(phone) {
-  if (!phone) return null;
-
-  const strippedPrefix = String(phone).startsWith("whatsapp:")
-    ? String(phone).slice("whatsapp:".length)
-    : String(phone);
-  const cleaned = strippedPrefix.replace(/[^\d+]/g, "");
-
-  if (!cleaned) return null;
-  if (cleaned.startsWith("+")) return "+" + cleaned.slice(1).replace(/\D/g, "");
-
-  const digits = cleaned.replace(/\D/g, "");
-
-  if (digits.startsWith("233")) return "+" + digits;
-  if (digits.startsWith("0") && digits.length === 10) return "+233" + digits.slice(1);
-  if (digits.length === 9) return "+233" + digits;
-  if (digits.length >= 10) return "+" + digits;
-
-  return null;
-}
-
-function buildLineItemsHtml(payload) {
-  return (payload.items || [])
-    .map(function (item) {
-      return (
-        "<tr>" +
-        '<td style="padding:8px;border-bottom:1px solid #eee">' +
-        escapeHtml(item.brand) +
-        " - " +
-        escapeHtml(item.product_name) +
-        "</td>" +
-        '<td style="padding:8px;border-bottom:1px solid #eee">Size ' +
-        escapeHtml(item.size) +
-        " x " +
-        item.quantity +
-        "</td>" +
-        '<td style="padding:8px;border-bottom:1px solid #eee;text-align:right">GHc' +
-        Number(item.price * item.quantity).toFixed(2) +
-        "</td>" +
-        "</tr>"
-      );
-    })
-    .join("");
-}
-
-function buildCustomerEmailHtml(payload) {
-  const paymentLabel = humanizePaymentMethod(payload.paymentMethod);
-  const lineItems = buildLineItemsHtml(payload);
-  const fulfillmentLabel = payload.fulfillmentType === "pickup" ? "Store Pickup" : "Delivery";
-  const shippingLabel = Number(payload.shippingCost || 0) === 0
-    ? "FREE"
-    : "GHc" + Number(payload.shippingCost || 0).toFixed(2);
-
-  return (
-    '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222">' +
-    '<h1 style="font-size:22px;margin-bottom:4px">Order Confirmed</h1>' +
-    '<p style="color:#666;margin-top:0">Order <strong>' + escapeHtml(payload.orderNumber) + "</strong></p>" +
-    "<p>Hi " + escapeHtml(payload.customerName) + ",</p>" +
-    "<p>Thank you for your order. We have received it and will contact you shortly.</p>" +
-    '<table style="width:100%;border-collapse:collapse;margin:16px 0">' +
-    "<thead>" +
-    '<tr style="background:#f5f5f5">' +
-    '<th style="padding:8px;text-align:left">Item</th>' +
-    '<th style="padding:8px;text-align:left">Details</th>' +
-    '<th style="padding:8px;text-align:right">Price</th>' +
-    "</tr>" +
-    "</thead>" +
-    "<tbody>" + lineItems + "</tbody>" +
-    "</table>" +
-    '<table style="width:100%;margin:16px 0">' +
-    '<tr><td style="padding:4px 0;color:#666">Fulfillment</td><td style="text-align:right">' + escapeHtml(fulfillmentLabel) + "</td></tr>" +
-    '<tr><td style="padding:4px 0;color:#666">Subtotal</td><td style="text-align:right">GHc' + Number(payload.subtotal || 0).toFixed(2) + "</td></tr>" +
-    '<tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">' + shippingLabel + "</td></tr>" +
-    '<tr><td style="padding:4px 0;color:#666">Payment</td><td style="text-align:right">' + escapeHtml(paymentLabel) + "</td></tr>" +
-    '<tr style="font-weight:bold;font-size:16px"><td style="padding:8px 0;border-top:2px solid #222">Total</td><td style="text-align:right;border-top:2px solid #222">GHc' + Number(payload.total || 0).toFixed(2) + "</td></tr>" +
-    "</table>" +
-    '<p style="color:#666;font-size:13px">Address: ' + escapeHtml(payload.shippingAddress) + "</p>" +
-    '<p style="color:#666;font-size:13px;margin-top:24px">If you have any questions, reply to this email and our team will help.</p>' +
-    "</div>"
-  );
-}
-
-function buildAdminEmailHtml(payload) {
-  const paymentLabel = humanizePaymentMethod(payload.paymentMethod);
-  const lineItems = buildLineItemsHtml(payload);
-  const shippingLabel = Number(payload.shippingCost || 0) === 0
-    ? "FREE"
-    : "GHc" + Number(payload.shippingCost || 0).toFixed(2);
-
-  return (
-    '<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#222">' +
-    '<h1 style="font-size:22px;margin-bottom:4px">New Order Received</h1>' +
-    '<p style="color:#666;margin-top:0">Order <strong>' + escapeHtml(payload.orderNumber) + "</strong></p>" +
-    '<table style="width:100%;margin:16px 0;border-collapse:collapse">' +
-    '<tr><td style="padding:6px 0;color:#666">Customer</td><td style="text-align:right">' + escapeHtml(payload.customerName) + "</td></tr>" +
-    '<tr><td style="padding:6px 0;color:#666">Email</td><td style="text-align:right">' + escapeHtml(payload.customerEmail) + "</td></tr>" +
-    '<tr><td style="padding:6px 0;color:#666">Phone</td><td style="text-align:right">' + escapeHtml(payload.customerPhone || "Not provided") + "</td></tr>" +
-    '<tr><td style="padding:6px 0;color:#666">Payment</td><td style="text-align:right">' + escapeHtml(paymentLabel) + "</td></tr>" +
-    '<tr><td style="padding:6px 0;color:#666">Ship To</td><td style="text-align:right">' + escapeHtml(payload.shippingAddress) + "</td></tr>" +
-    "</table>" +
-    '<table style="width:100%;border-collapse:collapse;margin:16px 0">' +
-    "<thead>" +
-    '<tr style="background:#f5f5f5">' +
-    '<th style="padding:8px;text-align:left">Item</th>' +
-    '<th style="padding:8px;text-align:left">Details</th>' +
-    '<th style="padding:8px;text-align:right">Price</th>' +
-    "</tr>" +
-    "</thead>" +
-    "<tbody>" + lineItems + "</tbody>" +
-    "</table>" +
-    '<table style="width:100%;margin:16px 0">' +
-    '<tr><td style="padding:4px 0;color:#666">Subtotal</td><td style="text-align:right">GHc' + Number(payload.subtotal || 0).toFixed(2) + "</td></tr>" +
-    '<tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">' + shippingLabel + "</td></tr>" +
-    '<tr style="font-weight:bold;font-size:16px"><td style="padding:8px 0;border-top:2px solid #222">Total</td><td style="text-align:right;border-top:2px solid #222">GHc' + Number(payload.total || 0).toFixed(2) + "</td></tr>" +
-    "</table>" +
-    "</div>"
-  );
-}
-
-function buildCustomerSmsBody(payload) {
-  return "Maggs Trove: your order " +
-    payload.orderNumber +
-    " for GHc" +
-    Number(payload.total || 0).toFixed(2) +
-    " was received. Payment: " +
-    humanizePaymentMethod(payload.paymentMethod) +
-    ". We will contact you soon.";
-}
-
-function buildAdminSmsBody(payload) {
-  return "New order " +
-    payload.orderNumber +
-    ". " +
-    payload.customerName +
-    ", " +
-    (payload.customerPhone || "no phone") +
-    ", GHc" +
-    Number(payload.total || 0).toFixed(2) +
-    ", " +
-    humanizePaymentMethod(payload.paymentMethod) +
-    ".";
-}
-
-function buildAdminCallTwiml(payload) {
-  const paymentLabel = humanizePaymentMethod(payload.paymentMethod);
-  return (
-    "<Response><Say voice=\"alice\">" +
-    "New Maggs Trove order received. Order number " +
-    escapeXml(payload.orderNumber) +
-    ". Customer " +
-    escapeXml(payload.customerName) +
-    ". Total " +
-    Number(payload.total || 0).toFixed(2) +
-    " Ghana cedis. Payment method " +
-    escapeXml(paymentLabel) +
-    ". Please review the admin dashboard." +
-    "</Say></Response>"
-  );
-}
-
-async function sendResendEmail(to, subject, html) {
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  if (!apiKey) throw new Error("RESEND_API_KEY not set");
-
+async function sendEmail(apiKey, from, to, subject, html) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -221,7 +12,7 @@ async function sendResendEmail(to, subject, html) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: EMAIL_FROM,
+      from: from,
       to: [to],
       subject: subject,
       html: html,
@@ -233,134 +24,93 @@ async function sendResendEmail(to, subject, html) {
   }
 }
 
-async function sendTwilioFormRequest(path, params) {
-  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-
-  if (!accountSid || !authToken) {
-    throw new Error("TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set");
-  }
-
-  const response = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + accountSid + "/" + path, {
-    method: "POST",
-    headers: {
-      Authorization: "Basic " + btoa(accountSid + ":" + authToken),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params.toString(),
-  });
-
-  if (!response.ok) {
-    throw new Error("Twilio error (" + response.status + "): " + await response.text());
-  }
-}
-
-async function sendSms(to, body) {
-  const from = Deno.env.get("TWILIO_SMS_FROM");
-  if (!from) throw new Error("TWILIO_SMS_FROM not set");
-
-  const params = new URLSearchParams();
-  params.set("From", from);
-  params.set("To", to);
-  params.set("Body", body);
-
-  await sendTwilioFormRequest("Messages.json", params);
-}
-
-async function sendWhatsApp(to, body) {
-  const from = Deno.env.get("TWILIO_WHATSAPP_FROM");
-  if (!from) throw new Error("TWILIO_WHATSAPP_FROM not set");
-
-  const params = new URLSearchParams();
-  params.set("From", from);
-  params.set("To", "whatsapp:" + to);
-  params.set("Body", body);
-
-  await sendTwilioFormRequest("Messages.json", params);
-}
-
-async function sendCall(to, twiml) {
-  const from = Deno.env.get("TWILIO_CALL_FROM");
-  if (!from) throw new Error("TWILIO_CALL_FROM not set");
-
-  const params = new URLSearchParams();
-  params.set("From", from);
-  params.set("To", to);
-  params.set("Twiml", twiml);
-
-  await sendTwilioFormRequest("Calls.json", params);
-}
-
-async function captureResult(results, key, action) {
-  try {
-    await action();
-    results[key] = "sent";
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[" + key + "]", message);
-    results[key] = "failed: " + message;
-  }
-}
-
 Deno.serve(async function (req) {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers });
   }
 
   try {
     const payload = await req.json();
+    const apiKey = Deno.env.get("RESEND_API_KEY");
+    const from = Deno.env.get("RESEND_FROM_EMAIL") || "Maggs Trove <onboarding@resend.dev>";
+    const adminEmail = Deno.env.get("ORDER_ADMIN_EMAIL") || "mosaichive@gmail.com";
+
+    if (!apiKey) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "RESEND_API_KEY not set"
+      }), {
+        status: 500,
+        headers,
+      });
+    }
+
+    const orderNumber = payload.orderNumber || "UNKNOWN";
+    const customerEmail = payload.customerEmail;
+    const customerName = payload.customerName || "Customer";
+    const total = Number(payload.total || 0).toFixed(2);
+    const paymentMethod = payload.paymentMethod || "unknown";
+    const shippingAddress = payload.shippingAddress || "Not provided";
+
+    const customerHtml =
+      "<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222\">" +
+      "<h1>Order Confirmed</h1>" +
+      "<p>Hi " + customerName + ",</p>" +
+      "<p>Thank you for your order.</p>" +
+      "<p><strong>Order Number:</strong> " + orderNumber + "</p>" +
+      "<p><strong>Total:</strong> GHc" + total + "</p>" +
+      "<p><strong>Payment:</strong> " + paymentMethod + "</p>" +
+      "<p><strong>Shipping Address:</strong> " + shippingAddress + "</p>" +
+      "</div>";
+
+    const adminHtml =
+      "<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222\">" +
+      "<h1>New Order Received</h1>" +
+      "<p><strong>Order Number:</strong> " + orderNumber + "</p>" +
+      "<p><strong>Customer:</strong> " + customerName + "</p>" +
+      "<p><strong>Customer Email:</strong> " + (customerEmail || "none") + "</p>" +
+      "<p><strong>Total:</strong> GHc" + total + "</p>" +
+      "<p><strong>Payment:</strong> " + paymentMethod + "</p>" +
+      "<p><strong>Shipping Address:</strong> " + shippingAddress + "</p>" +
+      "</div>";
+
     const results = {};
-    const adminPhone = normalizePhoneNumber(ADMIN_PHONE);
-    const customerPhone = normalizePhoneNumber(payload.customerPhone);
-    const customerEmailHtml = buildCustomerEmailHtml(payload);
-    const adminEmailHtml = buildAdminEmailHtml(payload);
-    const customerSmsBody = buildCustomerSmsBody(payload);
-    const adminSmsBody = buildAdminSmsBody(payload);
-    const adminCallTwiml = buildAdminCallTwiml(payload);
 
-    await captureResult(results, "customerEmail", async function () {
-      if (!payload.customerEmail) throw new Error("Customer email is missing");
-      await sendResendEmail(payload.customerEmail, "Order Confirmed - " + payload.orderNumber, customerEmailHtml);
-    });
-
-    await captureResult(results, "customerSms", async function () {
-      if (!customerPhone) throw new Error("Customer phone is missing or invalid");
-      await sendSms(customerPhone, customerSmsBody);
-    });
-
-    await captureResult(results, "adminEmail", async function () {
-      await sendResendEmail(
-        ADMIN_EMAIL,
-        "New Order " + payload.orderNumber + " - GHc" + Number(payload.total || 0).toFixed(2),
-        adminEmailHtml,
+    if (customerEmail) {
+      await sendEmail(
+        apiKey,
+        from,
+        customerEmail,
+        "Order Confirmed - " + orderNumber,
+        customerHtml
       );
-    });
+      results.customerEmail = "sent";
+    } else {
+      results.customerEmail = "skipped: no customer email";
+    }
 
-    await captureResult(results, "adminSms", async function () {
-      if (!adminPhone) throw new Error("Admin phone is missing or invalid");
-      await sendSms(adminPhone, adminSmsBody);
-    });
+    await sendEmail(
+      apiKey,
+      from,
+      adminEmail,
+      "New Order - " + orderNumber,
+      adminHtml
+    );
+    results.adminEmail = "sent";
 
-    await captureResult(results, "adminWhatsApp", async function () {
-      if (!adminPhone) throw new Error("Admin phone is missing or invalid");
-      await sendWhatsApp(adminPhone, adminSmsBody);
-    });
-
-    await captureResult(results, "adminCall", async function () {
-      if (!adminPhone) throw new Error("Admin phone is missing or invalid");
-      await sendCall(adminPhone, adminCallTwiml);
-    });
-
-    return new Response(JSON.stringify({ success: true, results: results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({
+      success: true,
+      results: results
+    }), {
+      headers,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Order notification error:", message);
-
-    return new Response(JSON.stringify({ success: false, error: message }), {
+    return new Response(JSON.stringify({
+      success: false,
+      error: String(error)
+    }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers,
     });
   }
 });
