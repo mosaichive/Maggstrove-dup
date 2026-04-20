@@ -39,6 +39,15 @@ interface SavedPayment {
 
 const NETWORK_LOGOS: Record<string, string> = { mtn: mtnLogo, telecel: telecelLogo, airteltigo: airteltigoLogo };
 const NETWORK_LABELS: Record<string, string> = { mtn: "MTN", telecel: "Telecel", airteltigo: "AirtelTigo" };
+const OPTIONAL_ORDER_COLUMNS = ["fulfillment_type", "voucher_code", "discount_amount"] as const;
+
+const isMissingOptionalOrderColumnError = (error: { message?: string; details?: string; hint?: string } | null) => {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
+  return OPTIONAL_ORDER_COLUMNS.some((column) => text.includes(column));
+};
+
+const formatStoredPaymentMethod = (paymentChannel: string) =>
+  paymentChannel === "cash_on_delivery" ? "cash_on_delivery" : `paystack:${paymentChannel}`;
 
 const CheckoutPage = () => {
   const { cartItems, cartCount, clearCart } = useShop();
@@ -231,33 +240,64 @@ const CheckoutPage = () => {
 
   const saveOrder = async (paymentRef: string, paymentChannel: string) => {
     const orderNumber = `MG-${Date.now().toString(36).toUpperCase()}`;
+    const storedPaymentMethod = formatStoredPaymentMethod(paymentChannel);
 
     if (user) {
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          user_id: user.id,
-          order_number: orderNumber,
-          subtotal,
-          shipping_cost: shippingCost,
-          total,
-          status: "pending",
-          payment_method: `paystack:${paymentChannel}`,
-          shipping_name: shipping.fullName,
-          shipping_email: shipping.email,
-          shipping_phone: shipping.phone,
-          shipping_address: fulfillmentType === "pickup" ? "Pickup" : shipping.address,
-          shipping_city: fulfillmentType === "pickup" ? "Pickup" : shipping.city,
-          shipping_region: fulfillmentType === "pickup" ? null : shipping.region,
-          shipping_country: shipping.country,
+      const baseOrderRecord = {
+        user_id: user.id,
+        order_number: orderNumber,
+        subtotal,
+        shipping_cost: shippingCost,
+        total,
+        status: "pending",
+        payment_method: storedPaymentMethod,
+        shipping_name: shipping.fullName,
+        shipping_email: shipping.email,
+        shipping_phone: shipping.phone,
+        shipping_address: fulfillmentType === "pickup" ? "Pickup" : shipping.address,
+        shipping_city: fulfillmentType === "pickup" ? "Pickup" : shipping.city,
+        shipping_region: fulfillmentType === "pickup" ? null : shipping.region,
+        shipping_country: shipping.country,
+      };
+
+      const orderInsertAttempts = [
+        {
+          ...baseOrderRecord,
           fulfillment_type: fulfillmentType,
           voucher_code: voucherApplied ? voucherCode.toUpperCase() : null,
           discount_amount: discountAmount,
-        } as any)
-        .select("id")
-        .single();
+        },
+        baseOrderRecord,
+      ];
 
-      if (orderError) throw orderError;
+      let order: { id: string } | null = null;
+      let orderError: Error | null = null;
+
+      for (let index = 0; index < orderInsertAttempts.length; index += 1) {
+        const { data, error } = await supabase
+          .from("orders")
+          .insert(orderInsertAttempts[index] as any)
+          .select("id")
+          .single();
+
+        if (!error) {
+          order = data;
+          orderError = null;
+          break;
+        }
+
+        if (index === 0 && isMissingOptionalOrderColumnError(error)) {
+          console.warn("Orders table is missing optional commerce columns. Retrying with the legacy order schema.", error.message);
+          orderError = error;
+          continue;
+        }
+
+        throw error;
+      }
+
+      if (!order) {
+        throw orderError ?? new Error("Failed to create order");
+      }
 
       // Increment voucher used_count
       if (voucherApplied && voucherCode) {
@@ -299,8 +339,10 @@ const CheckoutPage = () => {
           subtotal,
           shippingCost,
           total,
-          paymentMethod: `paystack:${paymentChannel}`,
+          paymentMethod: storedPaymentMethod,
           shippingAddress: `${shipping.address}, ${shipping.city}${shipping.region ? `, ${shipping.region}` : ""}, ${shipping.country}`,
+          customerPhone: shipping.phone,
+          fulfillmentType,
         },
       });
     } catch {

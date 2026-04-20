@@ -80,12 +80,34 @@ For a brand-new Supabase project, run these SQL helper files in Supabase SQL Edi
 
 - `supabase/manual-profile-bootstrap.sql`
 - `supabase/assign-admin-role.sql`
+- `supabase/manual-order-columns-bootstrap.sql`
 - `supabase/seed-ghana-shipping.sql`
 
 For Paystack, add these secrets to your Supabase Edge Functions environment and deploy the `verify-paystack` function:
 
 - `PAYSTACK_PUBLIC_KEY`
 - `PAYSTACK_SECRET_KEY`
+
+For order notifications, deploy the `order-notification` function and add the secrets below as needed:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `ORDER_ADMIN_EMAIL`
+- `ORDER_ADMIN_PHONE`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_SMS_FROM`
+- `TWILIO_WHATSAPP_FROM`
+- `TWILIO_CALL_FROM`
+
+The order notification function will attempt:
+
+- customer email
+- customer SMS
+- admin email
+- admin SMS
+- admin WhatsApp
+- admin call
 
 ## Notes
 
