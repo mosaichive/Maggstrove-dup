@@ -368,7 +368,7 @@ const CheckoutPage = () => {
 
     // Send notifications (non-blocking)
     try {
-      await supabase.functions.invoke("order-notification", {
+      const { data: notificationData, error: notificationError } = await supabase.functions.invoke("order-notification", {
         body: {
           orderNumber,
           customerEmail: shipping.email,
@@ -389,8 +389,16 @@ const CheckoutPage = () => {
           fulfillmentType,
         },
       });
-    } catch {
-      console.warn("Notification failed, order still placed");
+
+      if (notificationError) {
+        throw notificationError;
+      }
+
+      if (notificationData?.success === false) {
+        throw new Error(notificationData.error || "Order notification failed");
+      }
+    } catch (notificationError) {
+      console.warn("Notification failed, order still placed", notificationError);
     }
 
     return orderNumber;
