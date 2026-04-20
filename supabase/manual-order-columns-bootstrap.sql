@@ -66,6 +66,19 @@ do $$
 begin
   if exists (
     select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'orders'
+      and column_name = 'user_id'
+  ) then
+    execute 'alter table public.orders alter column user_id drop not null';
+  end if;
+end $$;
+
+do $$
+begin
+  if exists (
+    select 1
     from information_schema.table_constraints
     where table_schema = 'public'
       and table_name = 'orders'

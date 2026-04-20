@@ -46,6 +46,11 @@ const isMissingOptionalOrderColumnError = (error: { message?: string; details?: 
   return OPTIONAL_ORDER_COLUMNS.some((column) => text.includes(column));
 };
 
+const isBrokenOrderUserLinkError = (error: { message?: string; details?: string; hint?: string } | null) => {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("orders_user_id_fkey") || text.includes("user_id") || text.includes("auth.users");
+};
+
 const formatStoredPaymentMethod = (paymentChannel: string) =>
   paymentChannel === "cash_on_delivery" ? "cash_on_delivery" : `paystack:${paymentChannel}`;
 
@@ -244,7 +249,6 @@ const CheckoutPage = () => {
 
     if (user) {
       const baseOrderRecord = {
-        user_id: user.id,
         order_number: orderNumber,
         subtotal,
         shipping_cost: shippingCost,
@@ -262,10 +266,15 @@ const CheckoutPage = () => {
 
       const orderInsertAttempts = [
         {
+          user_id: user.id,
           ...baseOrderRecord,
           fulfillment_type: fulfillmentType,
           voucher_code: voucherApplied ? voucherCode.toUpperCase() : null,
           discount_amount: discountAmount,
+        },
+        {
+          user_id: user.id,
+          ...baseOrderRecord,
         },
         baseOrderRecord,
       ];
@@ -288,6 +297,12 @@ const CheckoutPage = () => {
 
         if (index === 0 && isMissingOptionalOrderColumnError(error)) {
           console.warn("Orders table is missing optional commerce columns. Retrying with the legacy order schema.", error.message);
+          orderError = error;
+          continue;
+        }
+
+        if (index < 2 && isBrokenOrderUserLinkError(error)) {
+          console.warn("Orders table user relationship is broken in this Supabase project. Retrying without user_id.", error.message);
           orderError = error;
           continue;
         }
