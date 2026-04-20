@@ -48,3 +48,16 @@ alter table public.orders
 
 alter table public.orders
   add column if not exists discount_amount numeric not null default 0;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'orders'
+      and column_name = 'vendor_id'
+  ) then
+    execute 'alter table public.orders alter column vendor_id drop not null';
+  end if;
+end $$;
