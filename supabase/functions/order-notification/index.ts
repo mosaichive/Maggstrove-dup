@@ -96,6 +96,7 @@ function buildCustomerEmailHtml(payload: OrderPayload): string {
   const paymentLabel = humanizePaymentMethod(payload.paymentMethod);
   const lineItems = buildLineItemsHtml(payload);
   const fulfillmentLabel = payload.fulfillmentType === "pickup" ? "Store Pickup" : "Delivery";
+  const shippingLabel = payload.shippingCost === 0 ? "FREE" : `GHc${payload.shippingCost.toFixed(2)}`;
 
   return `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222">
@@ -116,7 +117,7 @@ function buildCustomerEmailHtml(payload: OrderPayload): string {
       <table style="width:100%;margin:16px 0">
         <tr><td style="padding:4px 0;color:#666">Fulfillment</td><td style="text-align:right">${escapeHtml(fulfillmentLabel)}</td></tr>
         <tr><td style="padding:4px 0;color:#666">Subtotal</td><td style="text-align:right">GHc${payload.subtotal.toFixed(2)}</td></tr>
-        <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">${payload.shippingCost === 0 ? "FREE" : `GHc${payload.shippingCost.toFixed(2)}`}</td></tr>
+        <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">${shippingLabel}</td></tr>
         <tr><td style="padding:4px 0;color:#666">Payment</td><td style="text-align:right">${escapeHtml(paymentLabel)}</td></tr>
         <tr style="font-weight:bold;font-size:16px"><td style="padding:8px 0;border-top:2px solid #222">Total</td><td style="text-align:right;border-top:2px solid #222">GHc${payload.total.toFixed(2)}</td></tr>
       </table>
@@ -129,6 +130,7 @@ function buildCustomerEmailHtml(payload: OrderPayload): string {
 function buildAdminEmailHtml(payload: OrderPayload): string {
   const paymentLabel = humanizePaymentMethod(payload.paymentMethod);
   const lineItems = buildLineItemsHtml(payload);
+  const shippingLabel = payload.shippingCost === 0 ? "FREE" : `GHc${payload.shippingCost.toFixed(2)}`;
 
   return `
     <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#222">
@@ -153,7 +155,7 @@ function buildAdminEmailHtml(payload: OrderPayload): string {
       </table>
       <table style="width:100%;margin:16px 0">
         <tr><td style="padding:4px 0;color:#666">Subtotal</td><td style="text-align:right">GHc${payload.subtotal.toFixed(2)}</td></tr>
-        <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">${payload.shippingCost === 0 ? "FREE" : `GHc${payload.shippingCost.toFixed(2)}`}</td></tr>
+        <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="text-align:right">${shippingLabel}</td></tr>
         <tr style="font-weight:bold;font-size:16px"><td style="padding:8px 0;border-top:2px solid #222">Total</td><td style="text-align:right;border-top:2px solid #222">GHc${payload.total.toFixed(2)}</td></tr>
       </table>
     </div>
