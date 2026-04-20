@@ -1,0 +1,10 @@
+project_id = "qpmcdeuldcejijsopwle"
+
+[functions.verify-paystack]
+verify_jwt = false
+
+[functions.order-notification]
+verify_jwt = false
+
+[functions.order-status-notification]
+verify_jwt = false
