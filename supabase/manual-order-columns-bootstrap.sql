@@ -61,3 +61,16 @@ begin
     execute 'alter table public.orders alter column vendor_id drop not null';
   end if;
 end $$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'orders'
+      and constraint_name = 'orders_payment_method_check'
+  ) then
+    execute 'alter table public.orders drop constraint orders_payment_method_check';
+  end if;
+end $$;

@@ -22,6 +22,10 @@ const paymentLabels: Record<string, string> = {
   mobile_money: "Mobile Money",
   card: "Credit / Debit Card",
   cash: "Cash on Delivery",
+  cash_on_delivery: "Cash on Delivery",
+  "paystack:mobile_money": "Paystack Mobile Money",
+  "paystack:card": "Paystack Card",
+  "paystack:bank_transfer": "Paystack Bank Transfer",
 };
 
 const OrderConfirmationPage = () => {
