@@ -53,6 +53,16 @@ do $$
 begin
   if exists (
     select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'order_items'
+      and constraint_name = 'order_items_product_id_fkey'
+  ) then
+    execute 'alter table public.order_items drop constraint order_items_product_id_fkey';
+  end if;
+
+  if exists (
+    select 1
     from information_schema.columns
     where table_schema = 'public'
       and table_name = 'orders'
