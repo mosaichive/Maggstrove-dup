@@ -65,6 +65,23 @@ end $$;
 alter table public.order_items
   add column if not exists brand text not null default '';
 
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'order_items'
+      and column_name = 'product_id'
+      and data_type = 'uuid'
+  ) then
+    execute 'alter table public.order_items alter column product_id type text using product_id::text';
+  end if;
+end $$;
+
+alter table public.order_items
+  add column if not exists product_id text not null default '';
+
 alter table public.order_items
   add column if not exists image text;
 
