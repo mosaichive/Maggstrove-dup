@@ -62,6 +62,21 @@ begin
   end if;
 end $$;
 
+alter table public.order_items
+  add column if not exists brand text not null default '';
+
+alter table public.order_items
+  add column if not exists image text;
+
+alter table public.order_items
+  add column if not exists size text not null default '';
+
+alter table public.order_items
+  add column if not exists quantity integer not null default 1;
+
+alter table public.order_items
+  add column if not exists price numeric not null default 0;
+
 do $$
 begin
   if exists (

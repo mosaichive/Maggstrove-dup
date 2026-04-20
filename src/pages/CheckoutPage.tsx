@@ -40,6 +40,7 @@ interface SavedPayment {
 const NETWORK_LOGOS: Record<string, string> = { mtn: mtnLogo, telecel: telecelLogo, airteltigo: airteltigoLogo };
 const NETWORK_LABELS: Record<string, string> = { mtn: "MTN", telecel: "Telecel", airteltigo: "AirtelTigo" };
 const OPTIONAL_ORDER_COLUMNS = ["fulfillment_type", "voucher_code", "discount_amount"] as const;
+const OPTIONAL_ORDER_ITEM_COLUMNS = ["brand", "image"] as const;
 
 const isMissingOptionalOrderColumnError = (error: { message?: string; details?: string; hint?: string } | null) => {
   const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
@@ -49,6 +50,11 @@ const isMissingOptionalOrderColumnError = (error: { message?: string; details?: 
 const isBrokenOrderUserLinkError = (error: { message?: string; details?: string; hint?: string } | null) => {
   const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
   return text.includes("orders_user_id_fkey") || text.includes("user_id") || text.includes("auth.users");
+};
+
+const isMissingOptionalOrderItemColumnError = (error: { message?: string; details?: string; hint?: string } | null) => {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
+  return OPTIONAL_ORDER_ITEM_COLUMNS.some((column) => text.includes(column));
 };
 
 const formatStoredPaymentMethod = (paymentChannel: string) =>
@@ -333,8 +339,31 @@ const CheckoutPage = () => {
         price: item.price,
       }));
 
-      const { error: itemsError } = await supabase.from("order_items").insert(items);
-      if (itemsError) throw itemsError;
+      const legacyItems = items.map(({ brand, image, ...legacyItem }) => legacyItem);
+      const itemInsertAttempts = [items, legacyItems];
+
+      let itemsError: Error | null = null;
+
+      for (let index = 0; index < itemInsertAttempts.length; index += 1) {
+        const { error } = await supabase.from("order_items").insert(itemInsertAttempts[index] as any);
+
+        if (!error) {
+          itemsError = null;
+          break;
+        }
+
+        if (index === 0 && isMissingOptionalOrderItemColumnError(error)) {
+          console.warn("Order items table is missing optional catalog columns. Retrying with the legacy item schema.", error.message);
+          itemsError = error;
+          continue;
+        }
+
+        throw error;
+      }
+
+      if (itemsError) {
+        throw itemsError;
+      }
     }
 
     // Send notifications (non-blocking)
