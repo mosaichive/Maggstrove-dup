@@ -158,6 +158,7 @@ INSERT INTO public.shipping_cities (region_id, name, shipping_fee, sort_order, i
 SELECT regions.id, city_seed.city_name, city_seed.shipping_fee, city_seed.sort_order, true, now()
 FROM city_seed
 JOIN public.shipping_regions regions ON regions.name = city_seed.region_name
+WHERE true
 ON CONFLICT (region_id, name) DO UPDATE
 SET
   shipping_fee = EXCLUDED.shipping_fee,
