@@ -1,4 +1,19 @@
 alter table public.orders
+  add column if not exists user_id uuid references auth.users(id) on delete cascade;
+
+alter table public.orders
+  add column if not exists order_number text;
+
+alter table public.orders
+  add column if not exists subtotal numeric not null default 0;
+
+alter table public.orders
+  add column if not exists shipping_cost numeric not null default 0;
+
+alter table public.orders
+  add column if not exists total numeric not null default 0;
+
+alter table public.orders
   add column if not exists status text not null default 'pending';
 
 alter table public.orders
