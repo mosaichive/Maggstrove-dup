@@ -31,12 +31,13 @@ const EditProfileDialog = ({ open, onOpenChange, profile, onUpdated }: EditProfi
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({
+        .upsert({
+          id: profile.id,
+          email: profile.email,
           full_name: form.full_name.trim(),
           phone: form.phone.trim() || null,
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id);
+        }, { onConflict: "id" });
       if (error) throw error;
       toast.success("Profile updated!");
       onUpdated();

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrderTracking } from "@/hooks/useOrderTracking";
+import { AppProfile, loadUserProfile, upsertUserProfile } from "@/lib/profile";
 import OrderTrackingTimeline from "@/components/tracking/OrderTrackingTimeline";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -19,14 +20,6 @@ import {
   User, Mail, Phone, MapPin, Heart, ShoppingBag,
   CreditCard, LogOut, Edit, Plus, Camera, Package, Eye, Truck, Loader2, Star, Settings,
 } from "lucide-react";
-
-interface Profile {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  phone: string | null;
-  avatar_url: string | null;
-}
 
 interface ShippingAddress {
   id: string;
@@ -56,7 +49,9 @@ interface Order {
 const ProfilePage = () => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileWarning, setProfileWarning] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<ShippingAddress[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -77,46 +72,76 @@ const ProfilePage = () => {
 
   useEffect(() => {
     if (user) {
-      fetchProfile();
-      fetchAddresses();
-      fetchOrders();
-      fetchPaymentMethods();
+      void fetchProfile();
+      void fetchAddresses();
+      void fetchOrders();
+      void fetchPaymentMethods();
+    } else {
+      setProfile(null);
+      setProfileLoading(false);
+      setProfileWarning(null);
     }
   }, [user]);
 
   const fetchProfile = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user!.id)
-      .single();
-    if (data) setProfile(data as Profile);
+    if (!user) return;
+
+    setProfileLoading(true);
+    const { profile: nextProfile, degraded } = await loadUserProfile(user);
+    setProfile(nextProfile);
+    setProfileWarning(
+      degraded
+        ? "Your account is signed in, but your profile tables are not fully set up in Supabase yet."
+        : null,
+    );
+    setProfileLoading(false);
   };
 
   const fetchAddresses = async () => {
-    const { data } = await supabase
+    if (!user) return;
+
+    const { data, error } = await supabase
       .from("shipping_addresses")
       .select("*")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("is_default", { ascending: false });
+    if (error) {
+      console.error("Failed to load shipping addresses", error);
+      return;
+    }
+
     if (data) setAddresses(data as ShippingAddress[]);
   };
 
   const fetchOrders = async () => {
-    const { data } = await supabase
+    if (!user) return;
+
+    const { data, error } = await supabase
       .from("orders")
       .select("id, order_number, status, total, created_at")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+    if (error) {
+      console.error("Failed to load orders", error);
+      return;
+    }
+
     if (data) setOrders(data as Order[]);
   };
 
   const fetchPaymentMethods = async () => {
-    const { data } = await supabase
+    if (!user) return;
+
+    const { data, error } = await supabase
       .from("payment_methods")
       .select("*")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("is_default", { ascending: false });
+    if (error) {
+      console.error("Failed to load payment methods", error);
+      return;
+    }
+
     if (data) setPaymentMethods(data as PaymentMethod[]);
   };
 
@@ -133,12 +158,12 @@ const ProfilePage = () => {
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-      await supabase
-        .from("profiles")
-        .update({ avatar_url: urlData.publicUrl, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
-      
-      setProfile((p) => p ? { ...p, avatar_url: urlData.publicUrl } : p);
+      const { data: profileData, error: profileError } = await upsertUserProfile(user, {
+        avatar_url: urlData.publicUrl,
+      });
+      if (profileError) throw profileError;
+
+      setProfile((p) => profileData ?? (p ? { ...p, avatar_url: urlData.publicUrl } : p));
       toast.success("Profile photo updated!");
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
@@ -190,7 +215,7 @@ const ProfilePage = () => {
     }
   };
 
-  if (loading || !user || !profile) {
+  if (loading || profileLoading || !user || !profile) {
     return (
       <>
         <Header />
@@ -206,6 +231,12 @@ const ProfilePage = () => {
       <Header />
       <main className="min-h-screen bg-secondary/30">
         <div className="container mx-auto px-4 py-8 max-w-5xl">
+          {profileWarning ? (
+            <div className="mb-6 border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-900">
+              {profileWarning}
+            </div>
+          ) : null}
+
           {/* Profile Header */}
           <div className="bg-background border border-border p-6 md:p-8 mb-6">
             <div className="flex flex-col md:flex-row items-center gap-6">

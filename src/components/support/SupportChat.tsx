@@ -165,7 +165,7 @@ const SupportChat = ({ open, onOpenChange }: SupportChatProps) => {
       .from("profiles")
       .select("full_name")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
     const name = profile?.full_name || "there";
     setUserName(name);
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { useShop } from "@/context/ShopContext";
 import { supabase } from "@/integrations/supabase/client";
+import { AppProfile, loadUserProfile, upsertUserProfile } from "@/lib/profile";
 import { useNavigate } from "react-router-dom";
 import {
   User, Mail, Phone, Heart, ShoppingBag, Package,
@@ -24,14 +25,6 @@ interface ProfileDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface Profile {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  phone: string | null;
-  avatar_url: string | null;
-}
-
 interface RecentOrder {
   id: string;
   order_number: string;
@@ -44,7 +37,7 @@ const ProfileDrawer = ({ open, onOpenChange }: ProfileDrawerProps) => {
   const { user, signOut, isAdmin } = useAuth();
   const { favoritesCount, cartCount } = useShop();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [uploading, setUploading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -64,12 +57,8 @@ const ProfileDrawer = ({ open, onOpenChange }: ProfileDrawerProps) => {
 
   const fetchProfile = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-    if (data) setProfile(data as Profile);
+    const { profile: nextProfile } = await loadUserProfile(user);
+    setProfile(nextProfile);
   };
 
   const fetchRecentOrders = async () => {
@@ -95,11 +84,12 @@ const ProfileDrawer = ({ open, onOpenChange }: ProfileDrawerProps) => {
         .upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-      await supabase
-        .from("profiles")
-        .update({ avatar_url: urlData.publicUrl, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
-      setProfile((p) => p ? { ...p, avatar_url: urlData.publicUrl } : p);
+      const { data: profileData, error: profileError } = await upsertUserProfile(user, {
+        avatar_url: urlData.publicUrl,
+      });
+      if (profileError) throw profileError;
+
+      setProfile((p) => profileData ?? (p ? { ...p, avatar_url: urlData.publicUrl } : p));
       toast.success("Profile photo updated!");
     } catch (err: any) {
       toast.error(err.message || "Upload failed");

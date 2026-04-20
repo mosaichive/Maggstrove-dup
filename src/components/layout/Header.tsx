@@ -125,7 +125,7 @@ const Header = () => {
 
   useEffect(() => {
     if (user) {
-      supabase.from("profiles").select("avatar_url").eq("id", user.id).single()
+      supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle()
         .then(({ data }) => { if (data?.avatar_url) setAvatarUrl(data.avatar_url); });
     } else {
       setAvatarUrl(null);
