@@ -74,6 +74,19 @@ When importing the project into Vercel:
 2. Add the same `VITE_SUPABASE_*` environment variables from `.env`.
 3. Deploy.
 
+## Shipping and Paystack setup
+
+For a brand-new Supabase project, run these SQL helper files in Supabase SQL Editor:
+
+- `supabase/manual-profile-bootstrap.sql`
+- `supabase/assign-admin-role.sql`
+- `supabase/seed-ghana-shipping.sql`
+
+For Paystack, add these secrets to your Supabase Edge Functions environment and deploy the `verify-paystack` function:
+
+- `PAYSTACK_PUBLIC_KEY`
+- `PAYSTACK_SECRET_KEY`
+
 ## Notes
 
 - The admin dashboard depends on the `user_roles` table in Supabase.

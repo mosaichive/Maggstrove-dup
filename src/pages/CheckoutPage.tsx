@@ -63,6 +63,7 @@ const CheckoutPage = () => {
   const [selectedSavedPayment, setSelectedSavedPayment] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paystackPublicKey, setPaystackPublicKey] = useState<string | null>(null);
+  const [paystackError, setPaystackError] = useState<string | null>(null);
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherDiscount, setVoucherDiscount] = useState(0);
   const [voucherApplied, setVoucherApplied] = useState(false);
@@ -99,11 +100,19 @@ const CheckoutPage = () => {
       .then(({ data, error }) => {
         if (error) {
           console.error("Failed to load Paystack config:", error);
+          setPaystackError("Paystack is not available yet. Deploy the Supabase verify-paystack function and add both PAYSTACK_PUBLIC_KEY and PAYSTACK_SECRET_KEY.");
           return;
         }
-        if (data?.publicKey) {
+
+        if (data?.configured && data?.publicKey) {
           setPaystackPublicKey(data.publicKey);
+          setPaystackError(null);
+          return;
         }
+
+        setPaystackError(
+          "Paystack is not fully configured. Add PAYSTACK_PUBLIC_KEY and PAYSTACK_SECRET_KEY to your Supabase Edge Function secrets.",
+        );
       });
   }, []);
 
@@ -316,8 +325,8 @@ const CheckoutPage = () => {
   const handlePaystackPayment = async () => {
     if (!validateShipping()) return;
 
-    if (!paystackPublicKey) {
-      toast.error("Payment system is loading, please try again");
+    if (!paystackPublicKey || paystackError) {
+      toast.error(paystackError || "Payment system is loading, please try again");
       return;
     }
 
@@ -366,7 +375,12 @@ const CheckoutPage = () => {
         onSuccess: async (response: { reference: string }) => {
           try {
             const { data: verification } = await supabase.functions.invoke("verify-paystack", {
-              body: { action: "verify", reference: response.reference },
+              body: {
+                action: "verify",
+                reference: response.reference,
+                expectedAmount: total,
+                expectedCurrency: "GHS",
+              },
             });
 
             if (verification?.verified) {
@@ -593,10 +607,17 @@ const CheckoutPage = () => {
                   </RadioGroup>
 
                   {paymentMethod === "paystack" && (
-                    <div className="flex items-center gap-2 p-3 bg-secondary/50 border border-border rounded text-xs text-muted-foreground">
-                      <Lock className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>You'll be securely redirected to Paystack to complete your payment via Mobile Money or Card.</span>
-                    </div>
+                    <>
+                      <div className="flex items-center gap-2 p-3 bg-secondary/50 border border-border rounded text-xs text-muted-foreground">
+                        <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>You'll be securely redirected to Paystack to complete your payment via Mobile Money or Card.</span>
+                      </div>
+                      {paystackError ? (
+                        <div className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                          {paystackError}
+                        </div>
+                      ) : null}
+                    </>
                   )}
                 </section>
               </div>

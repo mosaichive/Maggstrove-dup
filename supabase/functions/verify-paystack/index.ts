@@ -11,20 +11,31 @@ serve(async (req) => {
   }
 
   try {
-    const { action, reference, email, amount, currency, metadata } = await req.json();
+    const {
+      action,
+      reference,
+      email,
+      amount,
+      currency,
+      metadata,
+      expectedAmount,
+      expectedCurrency,
+    } = await req.json();
     const secretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     const publicKey = Deno.env.get("PAYSTACK_PUBLIC_KEY");
 
-    if (!secretKey) {
-      return new Response(JSON.stringify({ error: "Paystack not configured" }), {
-        status: 500,
+    if (action === "get_config") {
+      return new Response(JSON.stringify({
+        configured: Boolean(publicKey && secretKey),
+        publicKey: publicKey ?? null,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Return public key for frontend inline popup
-    if (action === "get_config") {
-      return new Response(JSON.stringify({ publicKey }), {
+    if (!secretKey) {
+      return new Response(JSON.stringify({ error: "Paystack secret key is not configured" }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -75,12 +86,44 @@ serve(async (req) => {
         headers: { Authorization: `Bearer ${secretKey}` },
       });
       const data = await verifyRes.json();
+      const verifiedAmount = Number(data.data?.amount || 0) / 100;
+      const verifiedCurrency = data.data?.currency;
+
+      if (
+        data.status &&
+        data.data?.status === "success" &&
+        expectedAmount !== undefined &&
+        Math.abs(verifiedAmount - Number(expectedAmount)) > 0.01
+      ) {
+        return new Response(JSON.stringify({
+          verified: false,
+          message: `Verified amount mismatch. Expected ${expectedAmount}, received ${verifiedAmount}.`,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (
+        data.status &&
+        data.data?.status === "success" &&
+        expectedCurrency &&
+        verifiedCurrency !== expectedCurrency
+      ) {
+        return new Response(JSON.stringify({
+          verified: false,
+          message: `Verified currency mismatch. Expected ${expectedCurrency}, received ${verifiedCurrency}.`,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       if (data.status && data.data?.status === "success") {
         return new Response(JSON.stringify({
           verified: true,
-          amount: data.data.amount / 100,
-          currency: data.data.currency,
+          amount: verifiedAmount,
+          currency: verifiedCurrency,
           reference: data.data.reference,
           channel: data.data.channel,
         }), {

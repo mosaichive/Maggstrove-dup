@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { MapPin, Navigation } from "lucide-react";
 import { toast } from "sonner";
+import { GHANA_CITIES_BY_REGION, GHANA_REGION_NAMES } from "@/data/ghanaShipping";
 
 interface AddAddressDialogProps {
   open: boolean;
@@ -14,31 +15,6 @@ interface AddAddressDialogProps {
   userId: string;
   onAdded: () => void;
 }
-
-const GHANA_REGIONS = [
-  "Greater Accra", "Ashanti", "Western", "Eastern", "Central",
-  "Northern", "Volta", "Upper East", "Upper West", "Bono",
-  "Bono East", "Ahafo", "Western North", "Oti", "North East", "Savannah",
-];
-
-const GHANA_CITIES: Record<string, string[]> = {
-  "Greater Accra": ["Accra", "Tema", "Madina", "East Legon", "Nungua", "Teshie", "Dansoman", "Kasoa", "Adenta", "Ashaiman", "Spintex", "Cantonments", "Osu", "Labadi", "Achimota"],
-  "Ashanti": ["Kumasi", "Obuasi", "Ejisu", "Konongo", "Mampong", "Bekwai", "Offinso"],
-  "Western": ["Takoradi", "Sekondi", "Tarkwa", "Axim", "Prestea"],
-  "Eastern": ["Koforidua", "Nkawkaw", "Suhum", "Akim Oda", "Nsawam"],
-  "Central": ["Cape Coast", "Winneba", "Mankessim", "Elmina", "Kasoa"],
-  "Northern": ["Tamale", "Yendi", "Damongo", "Savelugu"],
-  "Volta": ["Ho", "Keta", "Hohoe", "Kpando", "Aflao"],
-  "Upper East": ["Bolgatanga", "Navrongo", "Bawku", "Zebilla"],
-  "Upper West": ["Wa", "Lawra", "Tumu", "Nadowli"],
-  "Bono": ["Sunyani", "Berekum", "Dormaa Ahenkro"],
-  "Bono East": ["Techiman", "Kintampo", "Nkoranza", "Atebubu"],
-  "Ahafo": ["Goaso", "Hwidiem", "Kenyasi"],
-  "Western North": ["Sefwi Wiawso", "Bibiani", "Juaboso"],
-  "Oti": ["Dambai", "Nkwanta", "Kadjebi"],
-  "North East": ["Nalerigu", "Gambaga", "Walewale"],
-  "Savannah": ["Damongo", "Bole", "Salaga"],
-};
 
 const AddAddressDialog = ({ open, onOpenChange, userId, onAdded }: AddAddressDialogProps) => {
   const [form, setForm] = useState({
@@ -60,8 +36,8 @@ const AddAddressDialog = ({ open, onOpenChange, userId, onAdded }: AddAddressDia
   const [availableCities, setAvailableCities] = useState<string[]>([]);
 
   useEffect(() => {
-    if (form.state && GHANA_CITIES[form.state]) {
-      setAvailableCities(GHANA_CITIES[form.state]);
+    if (form.state && GHANA_CITIES_BY_REGION[form.state]) {
+      setAvailableCities(GHANA_CITIES_BY_REGION[form.state]);
     } else {
       setAvailableCities([]);
     }
@@ -159,11 +135,11 @@ const AddAddressDialog = ({ open, onOpenChange, userId, onAdded }: AddAddressDia
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs font-semibold uppercase tracking-wider">Region *</Label>
+                <Label className="text-xs font-semibold uppercase tracking-wider">Region *</Label>
               <Select value={form.state} onValueChange={(v) => { set("state", v); set("city", ""); }}>
                 <SelectTrigger className="h-10 bg-secondary border-border"><SelectValue placeholder="Select region" /></SelectTrigger>
                 <SelectContent>
-                  {GHANA_REGIONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  {GHANA_REGION_NAMES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
